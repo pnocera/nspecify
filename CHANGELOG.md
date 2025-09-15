@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.3] - 2025-09-15
+
+### Added
+- Template packages for shell and PowerShell variants
+
+### Packages
+- nspecify-1.0.3-sh.zip
+- nspecify-1.0.3-ps.zip
+
+
 ## [1.0.2] - 2025-09-15
 
 ### Added
