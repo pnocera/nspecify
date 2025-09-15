@@ -40,6 +40,19 @@ export {
 // Logger utility
 export { logger } from './logger.js';
 
+// Error handling utilities
+export {
+  ErrorTypes,
+  detectErrorType,
+  getErrorSuggestions,
+  formatErrorMessage,
+  handleError,
+  createError,
+  withErrorHandling,
+  ErrorMessages,
+  retryWithBackoff
+} from './errors.js';
+
 // Template processing utilities
 export {
   detectShellType,
@@ -53,3 +66,13 @@ export {
   createScriptWrapper,
   validateTemplateStructure
 } from './templates.js';
+
+// Cache utilities
+export {
+  hasValidCache,
+  getCachedTemplate,
+  cacheTemplate,
+  clearCache,
+  getCacheStats,
+  pruneCache
+} from './cache.js';

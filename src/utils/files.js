@@ -7,8 +7,10 @@ import {
   readdirSync,
   statSync,
   renameSync,
-  unlinkSync
+  unlinkSync,
+  rmSync
 } from 'fs';
+import { promises as fs } from 'fs';
 import { join, dirname, basename, extname, sep, normalize } from 'path';
 import { platform } from 'os';
 import chalk from 'chalk';
@@ -384,5 +386,39 @@ export function getFileInfo(filePath) {
     };
   } catch (error) {
     return null;
+  }
+}
+
+/**
+ * Check if file exists
+ * @param {string} filePath - File path to check
+ * @returns {Promise<boolean>} True if file exists
+ */
+export async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Create directory recursively
+ * @param {string} dirPath - Directory path to create
+ * @returns {Promise<void>}
+ */
+export async function createDirectory(dirPath) {
+  await fs.mkdir(dirPath, { recursive: true });
+}
+
+/**
+ * Delete directory recursively
+ * @param {string} dirPath - Directory path to delete
+ * @returns {Promise<void>}
+ */
+export async function deleteDirectory(dirPath) {
+  if (existsSync(dirPath)) {
+    rmSync(dirPath, { recursive: true, force: true });
   }
 }

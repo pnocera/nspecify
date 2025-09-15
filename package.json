@@ -1,6 +1,6 @@
 {
   "name": "nspecify",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "npx-compatible CLI for Spec-Driven Development with Claude Code",
   "type": "module",
   "main": "src/index.js",
@@ -13,7 +13,11 @@
   "scripts": {
     "start": "node bin/nspecify.js",
     "dev": "nodemon bin/nspecify.js",
-    "test": "jest",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js src/",
+    "test:integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js test/integration/",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "lint": "eslint src/",
     "format": "prettier --write .",
     "build": "node scripts/build-release.js",
@@ -21,25 +25,50 @@
     "build:minor": "node scripts/build-release.js minor",
     "build:major": "node scripts/build-release.js major",
     "build:dry": "node scripts/build-release.js patch --no-bump",
-    "validate": "node scripts/build-release.js --validate-only"
+    "validate": "node scripts/build-release.js --validate-only",
+    "prepublishOnly": "pnpm test && pnpm validate",
+    "postpublish": "echo 'Successfully published nspecify! 🎉\nInstall globally: npm i -g nspecify\nOr use with npx: npx nspecify init my-project'"
   },
   "keywords": [
     "cli",
     "spec-driven",
     "claude",
     "development",
-    "npx"
+    "npx",
+    "sdd",
+    "specification",
+    "claude-code"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "GitHub",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pnocera/nspecify.git",
+    "directory": "nspecify"
+  },
+  "bugs": {
+    "url": "https://github.com/pnocera/nspecify/issues"
+  },
+  "homepage": "https://github.com/pnocera/nspecify#readme",
+  "files": [
+    "bin/nspecify.js",
+    "src/**/*.js",
+    "!src/**/*.test.js",
+    "!src/**/*.spec.js",
+    "templates/",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "packageManager": "pnpm@10.15.1",
   "dependencies": {
     "adm-zip": "0.5.16",
     "ansi-escapes": "7.0.0",
     "archiver": "7.0.1",
-    "axios": "1.7.7",
+    "axios": "1.12.0",
     "chalk": "5.3.0",
     "cli-cursor": "5.0.0",
+    "cli-table3": "^0.6.5",
     "commander": "14.0.1",
     "ora": "8.2.0",
     "simple-git": "3.25.0",
@@ -48,9 +77,11 @@
     "yaml": "2.6.1"
   },
   "devDependencies": {
+    "@jest/globals": "^30.1.2",
     "@types/node": "22.5.5",
     "eslint": "9.10.0",
     "jest": "29.7.0",
+    "jest-environment-node": "^30.1.2",
     "nodemon": "3.1.4",
     "prettier": "3.3.3"
   }

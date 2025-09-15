@@ -55,8 +55,8 @@ const PATHS = {
 // GitHub release information
 const GITHUB = {
   owner: 'github',
-  repo: 'spec-kit',
-  releasesUrl: 'https://api.github.com/repos/github/spec-kit/releases',
+  repo: 'nspecify',
+  releasesUrl: 'https://api.github.com/repos/github/nspecify/releases',
 };
 
 // ASCII banner

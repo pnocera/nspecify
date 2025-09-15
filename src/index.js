@@ -32,17 +32,12 @@ program
   });
 
 // Import commands
-import { checkCommand } from './commands/check.js';
+import { registerCheckCommand } from './commands/check.js';
+import { registerInitCommand } from './commands/init.js';
 
-// Check command - verify system requirements
-program
-  .command('check')
-  .description('check system requirements and tool availability')
-  .option('-q, --quiet', 'suppress output except errors')
-  .action(async (options) => {
-    const success = await checkCommand(options);
-    process.exit(success ? 0 : 1);
-  });
+// Register commands
+registerCheckCommand(program);
+registerInitCommand(program);
 
 // Global error handling for commands
 program.exitOverride((err) => {

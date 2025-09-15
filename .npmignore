@@ -1,31 +1,60 @@
-# Development files
+# Test files
 test/
-.eslintrc.json
-.prettierrc
+**/*.test.js
+**/*.spec.js
+jest.config.js
+coverage/
+.nyc_output/
+
+# Development configurations
+.eslintrc*
+.prettierrc*
+.gitignore
+.editorconfig
 jsconfig.json
 nodemon.json
-.gitignore
+
+# Documentation
+docs/
+examples/
+CONTRIBUTING.md
+
+# Build scripts
+scripts/
 
 # Source control
 .git/
 .github/
 
-# Documentation
-*.md
-!README.md
-
 # IDE files
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# Coverage
-coverage/
-.nyc_output/
+# OS files
+.DS_Store
+Thumbs.db
 
-# Environment files
-.env
-.env.*
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Dependencies
+node_modules/
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+# Temporary files
+temp/
+tmp/
+dist/
 
 # Build artifacts
-*.log
-.DS_Store
+*.tgz
+*.zip

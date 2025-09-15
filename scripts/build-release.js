@@ -37,7 +37,7 @@ async function getCurrentVersion() {
  */
 function bumpVersion(currentVersion, bumpType = 'patch') {
   const [major, minor, patch] = currentVersion.split('.').map(Number);
-  
+
   switch (bumpType) {
     case 'major':
       return `${major + 1}.0.0`;
@@ -264,11 +264,11 @@ See [CHANGELOG.md](CHANGELOG.md) for detailed changes.
 
 ## 🐛 Bug Reports
 
-Please report any issues at https://github.com/github/spec-kit/issues
+Please report any issues at https://github.com/pnocera/nspecify/issues
 
 ---
 
-*Built with ❤️ by the Spec Kit team*
+*Built with ❤️ by the NSpecify team*
 `;
 
   return template;

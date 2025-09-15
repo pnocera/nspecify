@@ -11,6 +11,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { logger as log } from './logger.js';
 import { ensureDirectory } from './files.js';
+import { getCachedTemplate, cacheTemplate, pruneCache } from './cache.js';
 
 const execAsync = promisify(exec);
 
@@ -58,7 +59,7 @@ export async function detectShellType() {
 export function parseFrontmatter(content) {
   const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
   const match = content.match(frontmatterRegex);
-  
+
   if (!match) {
     return { frontmatter: null, body: content };
   }
@@ -84,7 +85,7 @@ export function replaceVariables(content, variables = {}, shellType = 'ps') {
 
   // Handle script-specific replacements
   const { frontmatter, body } = parseFrontmatter(content);
-  
+
   if (frontmatter && frontmatter.scripts) {
     const scriptPath = frontmatter.scripts[shellType];
     if (scriptPath) {
@@ -117,7 +118,7 @@ export function replaceVariables(content, variables = {}, shellType = 'ps') {
 export function transformTemplatePath(sourcePath) {
   // Normalize the path for consistent handling
   const normalized = normalize(sourcePath);
-  
+
   // Transform known path patterns
   const transformations = {
     'memory/': '.specify/memory/',
@@ -174,9 +175,9 @@ export async function processTemplate(templatePath, variables = {}, shellType = 
  */
 export async function copyTemplateDirectory(sourceDir, targetDir, variables = {}, shellType = null) {
   const detectedShellType = shellType || await detectShellType();
-  
+
   // Ensure target directory exists
-  await ensureDirectory(targetDir);
+  ensureDirectory(targetDir);
 
   // Get all files in source directory
   const files = await readdir(sourceDir, { withFileTypes: true, recursive: true });
@@ -188,7 +189,7 @@ export async function copyTemplateDirectory(sourceDir, targetDir, variables = {}
       const targetPath = join(targetDir, relativePath);
 
       // Ensure target directory exists
-      await ensureDirectory(dirname(targetPath));
+      ensureDirectory(dirname(targetPath));
 
       // Process template files, copy others as-is
       if (file.name.endsWith('.md') || file.name.endsWith('.sh') || file.name.endsWith('.ps1')) {
@@ -217,7 +218,7 @@ export async function getScriptCommand(commandName, shellType = null) {
   try {
     const content = await loadTemplate(templatePath);
     const { frontmatter } = parseFrontmatter(content);
-    
+
     if (frontmatter && frontmatter.scripts) {
       return frontmatter.scripts[detectedShellType] || null;
     }
@@ -236,7 +237,7 @@ export async function getScriptCommand(commandName, shellType = null) {
  */
 export function createScriptWrapper(scriptPath, shellType = 'ps') {
   return async (args = []) => {
-    const command = shellType === 'ps' 
+    const command = shellType === 'ps'
       ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}" ${args.join(' ')}`
       : `bash "${scriptPath}" ${args.join(' ')}`;
 
@@ -283,4 +284,116 @@ export async function validateTemplateStructure(templateDir) {
     valid: errors.length === 0,
     errors
   };
+}
+
+/**
+ * Download template from GitHub releases
+ * @param {string} scriptType - Script type ('sh' or 'ps')
+ * @param {string} targetDir - Target directory for download
+ * @param {object} options - Download options
+ * @returns {Promise<string>} Path to downloaded file
+ */
+export async function downloadTemplate(scriptType, targetDir, options = {}) {
+  const { aiTool = 'claude-code', useCache = true } = options;
+
+  // Check cache first if enabled
+  if (useCache) {
+    const cachedPath = await getCachedTemplate(aiTool, scriptType);
+    if (cachedPath) {
+      log.info('Using cached template');
+      // Prune old cache files in background
+      pruneCache().catch(() => { });
+      return cachedPath;
+    }
+  }
+
+  // Construct download URL
+  const baseUrl = 'https://github.com/pnocera/nspecify/releases/latest/download';
+  const fileName = `specify-${aiTool}-${scriptType}.zip`;
+  const url = `${baseUrl}/${fileName}`;
+
+  log.info(`Downloading template from: ${url}`);
+
+  // Use axios to download the file
+  const axios = await import('axios').then(m => m.default);
+  const tempPath = join(targetDir, `template-${Date.now()}.zip`);
+
+  try {
+    const response = await axios({
+      method: 'GET',
+      url: url,
+      responseType: 'stream',
+      timeout: 30000,
+      headers: {
+        'User-Agent': 'nspecify-cli'
+      },
+      // Follow redirects
+      maxRedirects: 5
+    });
+
+    const writer = (await import('fs')).createWriteStream(tempPath);
+    response.data.pipe(writer);
+
+    return new Promise((resolve, reject) => {
+      writer.on('finish', async () => {
+        log.info('Template download completed');
+
+        // Cache the template for future use
+        if (useCache) {
+          await cacheTemplate(aiTool, scriptType, tempPath);
+        }
+
+        resolve(tempPath);
+      });
+      writer.on('error', reject);
+      response.data.on('error', reject);
+    });
+  } catch (error) {
+    // If it's a 404, provide a more helpful error message
+    if (error.response && error.response.status === 404) {
+      throw new Error(`Template not found: ${fileName}. Please check that the nspecify repository has released templates.`);
+    }
+    throw new Error(`Failed to download template: ${error.message}`);
+  }
+}
+
+/**
+ * Extract template zip file
+ * @param {string} zipPath - Path to zip file
+ * @param {string} targetDir - Target directory for extraction
+ * @returns {Promise<void>}
+ */
+export async function extractTemplate(zipPath, targetDir) {
+  const AdmZip = await import('adm-zip').then(m => m.default);
+
+  try {
+    log.info(`Extracting template to: ${targetDir}`);
+
+    const zip = new AdmZip(zipPath);
+    const entries = zip.getEntries();
+
+    for (const entry of entries) {
+      const entryName = entry.entryName;
+
+      // Skip if it's a directory entry
+      if (entry.isDirectory) {
+        continue;
+      }
+
+      // Calculate target path
+      const targetPath = join(targetDir, entryName);
+
+      // Ensure directory exists
+      ensureDirectory(dirname(targetPath));
+
+      // Extract file
+      zip.extractEntryTo(entry, dirname(targetPath), false, true);
+
+      log.debug(`Extracted: ${entryName}`);
+    }
+
+    log.info('Template extraction completed');
+  } catch (error) {
+    throw new Error(`Failed to extract template: ${error.message}`);
+  }
 }

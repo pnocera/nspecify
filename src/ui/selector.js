@@ -248,3 +248,17 @@ export const feedback = {
     console.log(chalk.yellow('✗ Selection cancelled'));
   }
 };
+
+/**
+ * Create a script type selector
+ * @param {string} defaultType - Default script type
+ * @returns {Promise<string|null>} Selected script type or null if cancelled
+ */
+export async function createScriptSelector(defaultType = 'ps') {
+  const options = [
+    { key: 'sh', label: 'Shell scripts (.sh) - For Linux/macOS/Git Bash' },
+    { key: 'ps', label: 'PowerShell scripts (.ps1) - For Windows' }
+  ];
+  
+  return selectWithArrows(options, 'Select script type for your project:', defaultType);
+}
