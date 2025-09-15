@@ -2,16 +2,35 @@ import { jest } from '@jest/globals';
 import { mockFs, mockProcess, resetAllMocks } from '../../test/helpers/mocks.js';
 import path from 'path';
 
+// Mock fs module
+const mockFsSync = {
+  existsSync: jest.fn(),
+  mkdirSync: jest.fn(),
+  readFileSync: jest.fn(),
+  writeFileSync: jest.fn(),
+  copyFileSync: jest.fn(),
+  readdirSync: jest.fn(),
+  statSync: jest.fn(),
+  renameSync: jest.fn(),
+  unlinkSync: jest.fn(),
+  rmSync: jest.fn(),
+  promises: mockFs
+};
+
 // Mock fs/promises
 jest.unstable_mockModule('fs/promises', () => mockFs);
+
+// Mock fs sync functions
+jest.unstable_mockModule('fs', () => mockFsSync);
 
 const { 
   ensureDirectory, 
   fileExists, 
   copyFile,
-  removeDirectory,
-  writeJsonFile,
-  readJsonFile
+  deleteDirectory,
+  writeFileAtomic,
+  readFileSafe,
+  createDirectory
 } = await import('./files.js');
 
 describe('files', () => {
@@ -19,7 +38,14 @@ describe('files', () => {
     resetAllMocks();
     global.process = mockProcess;
     
-    // Setup default mock behaviors
+    // Reset sync mocks (skip promises which is not a jest mock)
+    Object.entries(mockFsSync).forEach(([key, mock]) => {
+      if (key !== 'promises' && typeof mock.mockReset === 'function') {
+        mock.mockReset();
+      }
+    });
+    
+    // Setup default mock behaviors for async functions
     mockFs.access.mockResolvedValue();
     mockFs.mkdir.mockResolvedValue();
     mockFs.writeFile.mockResolvedValue();
@@ -29,6 +55,18 @@ describe('files', () => {
     mockFs.unlink.mockResolvedValue();
     mockFs.readdir.mockResolvedValue([]);
     mockFs.stat.mockResolvedValue({ isDirectory: () => false });
+
+    // Setup default mock behaviors for sync functions
+    mockFsSync.existsSync.mockReturnValue(true);
+    mockFsSync.mkdirSync.mockImplementation(() => {});
+    mockFsSync.readFileSync.mockReturnValue('test content');
+    mockFsSync.writeFileSync.mockImplementation(() => {});
+    mockFsSync.copyFileSync.mockImplementation(() => {});
+    mockFsSync.readdirSync.mockReturnValue([]);
+    mockFsSync.statSync.mockReturnValue({ isDirectory: () => false });
+    mockFsSync.renameSync.mockImplementation(() => {});
+    mockFsSync.unlinkSync.mockImplementation(() => {});
+    mockFsSync.rmSync.mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -36,45 +74,59 @@ describe('files', () => {
   });
 
   describe('ensureDirectory', () => {
-    it('should create directory if it does not exist', async () => {
-      mockFs.access.mockRejectedValue(new Error('ENOENT'));
+    it('should create directory if it does not exist', () => {
+      mockFsSync.existsSync.mockReturnValue(false);
 
-      await ensureDirectory('/path/to/dir');
+      const result = ensureDirectory('/path/to/dir');
 
-      expect(mockFs.mkdir).toHaveBeenCalledWith('/path/to/dir', { recursive: true });
+      expect(result).toBe(true);
+      expect(mockFsSync.existsSync).toHaveBeenCalledWith('/path/to/dir');
+      expect(mockFsSync.mkdirSync).toHaveBeenCalledWith('/path/to/dir', { recursive: true, mode: 0o755 });
     });
 
-    it('should not create directory if it already exists', async () => {
-      mockFs.access.mockResolvedValue();
+    it('should not create directory if it already exists', () => {
+      mockFsSync.existsSync.mockReturnValue(true);
 
-      await ensureDirectory('/path/to/existing');
+      const result = ensureDirectory('/path/to/existing');
 
-      expect(mockFs.mkdir).not.toHaveBeenCalled();
+      expect(result).toBe(true);
+      expect(mockFsSync.existsSync).toHaveBeenCalledWith('/path/to/existing');
+      expect(mockFsSync.mkdirSync).not.toHaveBeenCalled();
     });
 
-    it('should handle Windows paths', async () => {
-      mockFs.access.mockRejectedValue(new Error('ENOENT'));
+    it('should handle Windows paths', () => {
+      mockFsSync.existsSync.mockReturnValue(false);
 
-      await ensureDirectory('C:\\Projects\\test');
+      const result = ensureDirectory('C:\\Projects\\test');
 
-      expect(mockFs.mkdir).toHaveBeenCalledWith('C:\\Projects\\test', { recursive: true });
+      expect(result).toBe(true);
+      expect(mockFsSync.mkdirSync).toHaveBeenCalledWith('C:\\Projects\\test', { recursive: true, mode: 0o755 });
     });
 
-    it('should handle mkdir errors', async () => {
-      mockFs.access.mockRejectedValue(new Error('ENOENT'));
-      mockFs.mkdir.mockRejectedValue(new Error('Permission denied'));
+    it('should handle mkdir errors and return false', () => {
+      mockFsSync.existsSync.mockReturnValue(false);
+      mockFsSync.mkdirSync.mockImplementation(() => {
+        throw new Error('Permission denied');
+      });
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
-      await expect(ensureDirectory('/restricted/dir')).rejects.toThrow('Permission denied');
+      const result = ensureDirectory('/restricted/dir');
+
+      expect(result).toBe(false);
+      expect(consoleSpy).toHaveBeenCalled();
+      
+      consoleSpy.mockRestore();
     });
 
-    it('should create nested directories', async () => {
-      mockFs.access.mockRejectedValue(new Error('ENOENT'));
+    it('should create nested directories', () => {
+      mockFsSync.existsSync.mockReturnValue(false);
 
-      await ensureDirectory('/path/to/deeply/nested/dir');
+      const result = ensureDirectory('/path/to/deeply/nested/dir');
 
-      expect(mockFs.mkdir).toHaveBeenCalledWith(
+      expect(result).toBe(true);
+      expect(mockFsSync.mkdirSync).toHaveBeenCalledWith(
         '/path/to/deeply/nested/dir',
-        { recursive: true }
+        { recursive: true, mode: 0o755 }
       );
     });
   });
@@ -116,203 +168,191 @@ describe('files', () => {
   });
 
   describe('copyFile', () => {
-    it('should copy file successfully', async () => {
-      await copyFile('/source/file.txt', '/dest/file.txt');
+    it('should copy file successfully', () => {
+      mockFsSync.existsSync
+        .mockReturnValueOnce(true)  // source exists
+        .mockReturnValueOnce(false); // destination doesn't exist
 
-      expect(mockFs.copyFile).toHaveBeenCalledWith(
-        '/source/file.txt',
-        '/dest/file.txt'
-      );
+      const result = copyFile('/source/file.txt', '/dest/file.txt');
+
+      expect(result.success).toBe(true);
+      expect(mockFsSync.copyFileSync).toHaveBeenCalledWith('/source/file.txt', '/dest/file.txt');
     });
 
-    it('should ensure destination directory exists', async () => {
-      mockFs.access.mockRejectedValue(new Error('ENOENT'));
+    it('should handle source not found', () => {
+      mockFsSync.existsSync.mockReturnValue(false);
 
-      await copyFile('/source/file.txt', '/new/dest/file.txt');
+      const result = copyFile('/missing/file.txt', '/dest/file.txt');
 
-      expect(mockFs.mkdir).toHaveBeenCalledWith('/new/dest', { recursive: true });
-      expect(mockFs.copyFile).toHaveBeenCalledWith(
-        '/source/file.txt',
-        '/new/dest/file.txt'
-      );
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Source file not found');
     });
 
-    it('should handle copy errors', async () => {
-      mockFs.copyFile.mockRejectedValue(new Error('Source not found'));
+    it('should work with Windows paths', () => {
+      mockFsSync.existsSync
+        .mockReturnValueOnce(true)  // source exists
+        .mockReturnValueOnce(false); // destination doesn't exist
 
-      await expect(
-        copyFile('/missing/file.txt', '/dest/file.txt')
-      ).rejects.toThrow('Source not found');
+      const result = copyFile('C:\\source\\file.txt', 'D:\\dest\\file.txt');
+
+      expect(result.success).toBe(true);
+      expect(mockFsSync.copyFileSync).toHaveBeenCalledWith('C:\\source\\file.txt', 'D:\\dest\\file.txt');
     });
 
-    it('should work with Windows paths', async () => {
-      await copyFile('C:\\source\\file.txt', 'D:\\dest\\file.txt');
+    it('should handle backup when destination exists', () => {
+      mockFsSync.existsSync
+        .mockReturnValueOnce(true) // source exists
+        .mockReturnValueOnce(true); // destination exists
 
-      expect(mockFs.copyFile).toHaveBeenCalledWith(
-        'C:\\source\\file.txt',
-        'D:\\dest\\file.txt'
-      );
+      const result = copyFile('/source/file.txt', '/dest/file.txt', { backup: true });
+
+      expect(result.success).toBe(true);
+      expect(result.backed_up).toBe(true);
+      expect(mockFsSync.copyFileSync).toHaveBeenCalledWith('/dest/file.txt', '/dest/file.txt.backup');
+      expect(mockFsSync.copyFileSync).toHaveBeenCalledWith('/source/file.txt', '/dest/file.txt');
     });
 
-    it('should handle cross-drive copies on Windows', async () => {
-      mockFs.access.mockRejectedValue(new Error('ENOENT'));
+    it('should fail when ensureDirectory fails', () => {
+      mockFsSync.existsSync
+        .mockReturnValueOnce(true)  // source exists
+        .mockReturnValueOnce(false) // destination doesn't exist
+        .mockReturnValueOnce(false); // destination dir doesn't exist
+      mockFsSync.mkdirSync.mockImplementation(() => {
+        throw new Error('Permission denied');
+      });
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
-      await copyFile('C:\\source\\file.txt', 'E:\\Projects\\dest\\file.txt');
+      const result = copyFile('/source/file.txt', '/dest/file.txt');
 
-      expect(mockFs.mkdir).toHaveBeenCalledWith('E:\\Projects\\dest', { recursive: true });
-      expect(mockFs.copyFile).toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Failed to create destination directory');
+      
+      consoleSpy.mockRestore();
     });
   });
 
-  describe('removeDirectory', () => {
-    it('should remove empty directory', async () => {
-      mockFs.readdir.mockResolvedValue([]);
+  describe('deleteDirectory', () => {
+    it('should delete directory using sync method', () => {
+      mockFsSync.existsSync.mockReturnValue(true);
 
-      await removeDirectory('/empty/dir');
+      deleteDirectory('/test/dir');
 
-      expect(mockFs.rmdir).toHaveBeenCalledWith('/empty/dir');
+      expect(mockFsSync.existsSync).toHaveBeenCalledWith('/test/dir');
+      expect(mockFsSync.rmSync).toHaveBeenCalledWith('/test/dir', { recursive: true, force: true });
     });
 
-    it('should remove directory with files', async () => {
-      mockFs.readdir.mockResolvedValue(['file1.txt', 'file2.txt']);
-      mockFs.stat.mockResolvedValue({ isDirectory: () => false });
+    it('should not call rmSync if directory does not exist', () => {
+      mockFsSync.existsSync.mockReturnValue(false);
 
-      await removeDirectory('/dir/with/files');
+      deleteDirectory('/missing/dir');
 
-      expect(mockFs.unlink).toHaveBeenCalledWith(path.join('/dir/with/files', 'file1.txt'));
-      expect(mockFs.unlink).toHaveBeenCalledWith(path.join('/dir/with/files', 'file2.txt'));
-      expect(mockFs.rmdir).toHaveBeenCalledWith('/dir/with/files');
-    });
-
-    it('should recursively remove subdirectories', async () => {
-      // First call returns subdirectory
-      mockFs.readdir
-        .mockResolvedValueOnce(['subdir'])
-        .mockResolvedValueOnce([]); // subdir is empty
-      
-      mockFs.stat.mockResolvedValueOnce({ isDirectory: () => true });
-
-      await removeDirectory('/parent');
-
-      expect(mockFs.readdir).toHaveBeenCalledTimes(2);
-      expect(mockFs.rmdir).toHaveBeenCalledWith(path.join('/parent', 'subdir'));
-      expect(mockFs.rmdir).toHaveBeenCalledWith('/parent');
-    });
-
-    it('should handle removal errors gracefully', async () => {
-      mockFs.readdir.mockRejectedValue(new Error('Directory not found'));
-
-      // Should not throw, just return
-      await expect(removeDirectory('/missing')).resolves.toBeUndefined();
-    });
-
-    it('should handle Windows paths', async () => {
-      mockFs.readdir.mockResolvedValue(['file.txt']);
-      mockFs.stat.mockResolvedValue({ isDirectory: () => false });
-
-      await removeDirectory('E:\\Projects\\temp');
-
-      expect(mockFs.unlink).toHaveBeenCalledWith('E:\\Projects\\temp\\file.txt');
-      expect(mockFs.rmdir).toHaveBeenCalledWith('E:\\Projects\\temp');
+      expect(mockFsSync.existsSync).toHaveBeenCalledWith('/missing/dir');
+      expect(mockFsSync.rmSync).not.toHaveBeenCalled();
     });
   });
 
-  describe('writeJsonFile', () => {
-    it('should write JSON file with proper formatting', async () => {
-      const data = { name: 'test', version: '1.0.0' };
-      
-      await writeJsonFile('/path/to/file.json', data);
+  describe('createDirectory', () => {
+    it('should create directory recursively', async () => {
+      await createDirectory('/new/path/dir');
 
-      expect(mockFs.writeFile).toHaveBeenCalledWith(
-        '/path/to/file.json',
-        JSON.stringify(data, null, 2)
-      );
+      expect(mockFs.mkdir).toHaveBeenCalledWith('/new/path/dir', { recursive: true });
     });
 
-    it('should ensure directory exists before writing', async () => {
-      mockFs.access.mockRejectedValue(new Error('ENOENT'));
-      
-      await writeJsonFile('/new/path/config.json', { test: true });
+    it('should handle mkdir errors', async () => {
+      mockFs.mkdir.mockRejectedValue(new Error('Permission denied'));
 
-      expect(mockFs.mkdir).toHaveBeenCalledWith('/new/path', { recursive: true });
-      expect(mockFs.writeFile).toHaveBeenCalled();
-    });
-
-    it('should handle circular references', async () => {
-      const data = { name: 'test' };
-      data.circular = data; // Create circular reference
-
-      await expect(
-        writeJsonFile('/path/to/file.json', data)
-      ).rejects.toThrow();
-    });
-
-    it('should write empty objects', async () => {
-      await writeJsonFile('/path/to/empty.json', {});
-
-      expect(mockFs.writeFile).toHaveBeenCalledWith(
-        '/path/to/empty.json',
-        '{}'
-      );
-    });
-
-    it('should handle Windows paths', async () => {
-      await writeJsonFile('C:\\config\\settings.json', { debug: true });
-
-      expect(mockFs.writeFile).toHaveBeenCalledWith(
-        'C:\\config\\settings.json',
-        expect.any(String)
-      );
+      await expect(createDirectory('/restricted/dir')).rejects.toThrow('Permission denied');
     });
   });
 
-  describe('readJsonFile', () => {
-    it('should read and parse JSON file', async () => {
-      const data = { name: 'test', version: '1.0.0' };
-      mockFs.readFile.mockResolvedValue(JSON.stringify(data));
+  describe('writeFileAtomic', () => {
+    it('should write file atomically with sync methods', () => {
+      mockFsSync.existsSync
+        .mockReturnValueOnce(false) // directory exists check (for ensureDirectory)
+        .mockReturnValueOnce(false) // file doesn't exist for backup
+        .mockReturnValueOnce(false); // file doesn't exist before rename
 
-      const result = await readJsonFile('/path/to/file.json');
+      const result = writeFileAtomic('/path/to/file.txt', 'test content');
 
-      expect(result).toEqual(data);
-      expect(mockFs.readFile).toHaveBeenCalledWith('/path/to/file.json', 'utf-8');
+      expect(result.success).toBe(true);
+      expect(mockFsSync.writeFileSync).toHaveBeenCalledWith('/path/to/file.txt.tmp', 'test content', { encoding: 'utf8' });
+      expect(mockFsSync.renameSync).toHaveBeenCalledWith('/path/to/file.txt.tmp', '/path/to/file.txt');
     });
 
-    it('should return null for non-existent file', async () => {
-      mockFs.readFile.mockRejectedValue(new Error('ENOENT'));
+    it('should backup existing file when requested', () => {
+      mockFsSync.existsSync
+        .mockReturnValueOnce(true)  // directory exists (for ensureDirectory)
+        .mockReturnValueOnce(true)  // file exists for backup
+        .mockReturnValueOnce(true); // file exists before rename
 
-      const result = await readJsonFile('/missing/file.json');
+      const result = writeFileAtomic('/path/to/file.txt', 'new content', { backup: true });
 
-      expect(result).toBeNull();
+      expect(result.success).toBe(true);
+      expect(result.backed_up).toBe(true);
+      expect(mockFsSync.copyFileSync).toHaveBeenCalledWith('/path/to/file.txt', '/path/to/file.txt.backup');
     });
 
-    it('should throw for invalid JSON', async () => {
-      mockFs.readFile.mockResolvedValue('{ invalid json');
+    it('should handle directory creation failure', () => {
+      mockFsSync.existsSync.mockReturnValue(false);
+      mockFsSync.mkdirSync.mockImplementation(() => {
+        throw new Error('Permission denied');
+      });
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
-      await expect(readJsonFile('/path/to/invalid.json')).rejects.toThrow();
+      const result = writeFileAtomic('/path/to/file.txt', 'test content');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Failed to create directory');
+      
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('readFileSafe', () => {
+    it('should read file successfully with sync methods', () => {
+      mockFsSync.existsSync.mockReturnValue(true);
+      mockFsSync.readFileSync.mockReturnValue('test content');
+
+      const result = readFileSafe('/path/to/file.txt');
+
+      expect(result.success).toBe(true);
+      expect(result.content).toBe('test content');
+      expect(result.error).toBeNull();
+      expect(mockFsSync.existsSync).toHaveBeenCalledWith('/path/to/file.txt');
+      expect(mockFsSync.readFileSync).toHaveBeenCalledWith('/path/to/file.txt', 'utf8');
     });
 
-    it('should handle empty files', async () => {
-      mockFs.readFile.mockResolvedValue('');
+    it('should return error for non-existent file', () => {
+      mockFsSync.existsSync.mockReturnValue(false);
 
-      await expect(readJsonFile('/path/to/empty.json')).rejects.toThrow();
+      const result = readFileSafe('/missing/file.txt');
+
+      expect(result.success).toBe(false);
+      expect(result.content).toBeNull();
+      expect(result.error).toContain('File not found');
     });
 
-    it('should read Windows path files', async () => {
-      mockFs.readFile.mockResolvedValue('{"windows": true}');
+    it('should handle read errors', () => {
+      mockFsSync.existsSync.mockReturnValue(true);
+      mockFsSync.readFileSync.mockImplementation(() => {
+        throw new Error('Permission denied');
+      });
 
-      const result = await readJsonFile('E:\\config\\app.json');
+      const result = readFileSafe('/restricted/file.txt');
 
-      expect(result).toEqual({ windows: true });
-      expect(mockFs.readFile).toHaveBeenCalledWith('E:\\config\\app.json', 'utf-8');
+      expect(result.success).toBe(false);
+      expect(result.content).toBeNull();
+      expect(result.error).toBe('Permission denied');
     });
 
-    it('should handle UTF-8 BOM', async () => {
-      const bomData = '\ufeff{"test": true}';
-      mockFs.readFile.mockResolvedValue(bomData);
+    it('should support custom encoding', () => {
+      mockFsSync.existsSync.mockReturnValue(true);
+      mockFsSync.readFileSync.mockReturnValue('binary content');
 
-      const result = await readJsonFile('/path/to/bom.json');
+      const result = readFileSafe('/path/to/file.bin', { encoding: 'binary' });
 
-      expect(result).toEqual({ test: true });
+      expect(result.success).toBe(true);
+      expect(mockFsSync.readFileSync).toHaveBeenCalledWith('/path/to/file.bin', 'binary');
     });
   });
 });

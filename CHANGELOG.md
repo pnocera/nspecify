@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.1] - 2025-09-15
+
+### Added
+- Template packages for shell and PowerShell variants
+
+### Packages
+- nspecify-1.0.1-sh.zip
+- nspecify-1.0.1-ps.zip
+
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

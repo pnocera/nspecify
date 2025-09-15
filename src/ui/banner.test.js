@@ -1,6 +1,11 @@
 import { jest } from '@jest/globals';
 import { mockProcess, resetAllMocks } from '../../test/helpers/mocks.js';
 
+// Mock strip-ansi module
+jest.unstable_mockModule('strip-ansi', () => ({
+  default: jest.fn((text) => text.replace(/\[[^\]]+\]/g, ''))
+}));
+
 // Mock chalk module
 jest.unstable_mockModule('chalk', () => ({
   default: {

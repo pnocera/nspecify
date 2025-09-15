@@ -8,21 +8,8 @@ jest.unstable_mockModule('readline', () => ({
   }
 }));
 
-// Mock dependencies
-jest.unstable_mockModule('cli-cursor', () => {
-  const cursor = {
-    hide: jest.fn(),
-    show: jest.fn()
-  };
-  return {
-    default: cursor,
-    ...cursor
-  };
-});
-
 // Import after mocking
-const { getKeyboard, KeyboardHandler } = await import('./keyboard.js');
-const cliCursor = await import('cli-cursor');
+const { getKeyboard, KeyboardHandler, getKey } = await import('./keyboard.js');
 const readline = await import('readline');
 
 describe('keyboard', () => {
@@ -78,8 +65,6 @@ describe('keyboard', () => {
       expect(readline.default.emitKeypressEvents).toHaveBeenCalledWith(process.stdin);
       expect(mockProcess.stdin.setRawMode).toHaveBeenCalledWith(true);
       expect(mockProcess.stdin.resume).toHaveBeenCalled();
-      // cli-cursor is not used in keyboard.js
-      expect(cliCursor.default.hide).not.toHaveBeenCalled();
     });
 
     it('should disable raw mode', () => {
@@ -90,8 +75,6 @@ describe('keyboard', () => {
       
       expect(mockProcess.stdin.pause).toHaveBeenCalled();
       expect(mockProcess.stdin.setRawMode).toHaveBeenCalledWith(false);
-      // cli-cursor is not used in keyboard.js
-      expect(cliCursor.default.show).not.toHaveBeenCalled();
     });
 
     it('should handle non-TTY environment', () => {
@@ -206,8 +189,6 @@ describe('keyboard', () => {
         expect(mockProcess.stdin.setRawMode).toHaveBeenCalledWith(false);
       }
       expect(mockProcess.stdin.removeAllListeners).toHaveBeenCalledWith('keypress');
-      // cli-cursor is not used in keyboard.js
-      expect(cliCursor.default.show).not.toHaveBeenCalled();
     });
 
     it('should waitForKey promise', async () => {
@@ -216,10 +197,15 @@ describe('keyboard', () => {
       const keyPromise = handler.waitForKey();
       
       // Emit any key - waitForKey listens to 'any' event
-      handler.emit('test-key');
+      handler.emit('test-key', { str: 't', key: { name: 'test-key' } });
       
       const result = await keyPromise;
       expect(result).toBe('test-key');
+    });
+
+    it('should export getKey function', async () => {
+      expect(getKey).toBeDefined();
+      expect(typeof getKey).toBe('function');
     });
   });
 });

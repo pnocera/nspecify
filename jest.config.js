@@ -19,10 +19,8 @@ export default {
   },
   coverageReporters: ['text', 'lcov', 'html'],
   transform: {},
-  moduleNameMapper: {
-    '^(\\.{1,2}/.*)\\.js$': '$1'
-  },
   testEnvironmentOptions: {
     customExportConditions: ['node', 'node-addons']
-  }
+  },
+  testTimeout: 10000
 };

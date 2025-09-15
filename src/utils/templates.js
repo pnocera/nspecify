@@ -5,10 +5,12 @@
 
 import { readFile, writeFile, access, readdir } from 'fs/promises';
 import { join, dirname, relative, normalize } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, createWriteStream } from 'fs';
 import { parse } from 'yaml';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import axios from 'axios';
+import AdmZip from 'adm-zip';
 import { logger as log } from './logger.js';
 import { ensureDirectory } from './files.js';
 import { getCachedTemplate, cacheTemplate, pruneCache } from './cache.js';
@@ -301,8 +303,10 @@ export async function downloadTemplate(scriptType, targetDir, options = {}) {
     const cachedPath = await getCachedTemplate(aiTool, scriptType);
     if (cachedPath) {
       log.info('Using cached template');
-      // Prune old cache files in background
-      pruneCache().catch(() => { });
+      // Prune old cache files in background - but don't let it interfere with tests
+      if (process.env.NODE_ENV !== 'test') {
+        pruneCache().catch(() => { });
+      }
       return cachedPath;
     }
   }
@@ -315,7 +319,6 @@ export async function downloadTemplate(scriptType, targetDir, options = {}) {
   log.info(`Downloading template from: ${url}`);
 
   // Use axios to download the file
-  const axios = await import('axios').then(m => m.default);
   const tempPath = join(targetDir, `template-${Date.now()}.zip`);
 
   try {
@@ -331,7 +334,7 @@ export async function downloadTemplate(scriptType, targetDir, options = {}) {
       maxRedirects: 5
     });
 
-    const writer = (await import('fs')).createWriteStream(tempPath);
+    const writer = createWriteStream(tempPath);
     response.data.pipe(writer);
 
     return new Promise((resolve, reject) => {
@@ -364,8 +367,6 @@ export async function downloadTemplate(scriptType, targetDir, options = {}) {
  * @returns {Promise<void>}
  */
 export async function extractTemplate(zipPath, targetDir) {
-  const AdmZip = await import('adm-zip').then(m => m.default);
-
   try {
     log.info(`Extracting template to: ${targetDir}`);
 

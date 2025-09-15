@@ -169,7 +169,8 @@ export async function initCommand(projectName, options = {}) {
     tracker.addStep({ description: step });
   });
 
-  let cleanupNeeded = false;
+  // Mark for cleanup if we created a directory
+  let cleanupNeeded = !here;
 
   try {
     // Download templates
@@ -222,9 +223,6 @@ export async function initCommand(projectName, options = {}) {
       
       tracker.updateStatus(3, gitInitialized ? 'done' : 'error');
     }
-
-    // Mark for cleanup if we created a directory
-    cleanupNeeded = !here;
     
     // Stop the tracker
     tracker.stop();
@@ -268,8 +266,12 @@ export async function initCommand(projectName, options = {}) {
     // Use enhanced error handling
     handleError(error, {
       context: 'Project initialization failed',
-      showStack: debug
+      showStack: debug,
+      exit: false  // Don't exit, let the error propagate
     });
+    
+    // Re-throw the error to ensure promise rejection
+    throw error;
   }
 }
 

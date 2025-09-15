@@ -82,18 +82,32 @@ export const createMockGit = () => {
   return git;
 };
 
-// Mock ora spinner
-export const mockSpinner = {
-  start: jest.fn().mockReturnThis(),
-  succeed: jest.fn().mockReturnThis(),
-  fail: jest.fn().mockReturnThis(),
-  info: jest.fn().mockReturnThis(),
-  warn: jest.fn().mockReturnThis(),
-  stop: jest.fn().mockReturnThis(),
-  text: ''
+// Mock ora spinner - create a function that returns proper chainable mocks
+export const createMockSpinner = () => {
+  const spinner = {
+    start: jest.fn(),
+    succeed: jest.fn(), 
+    fail: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    stop: jest.fn(),
+    text: ''
+  };
+  
+  // Make all methods return the spinner for chaining
+  spinner.start.mockReturnValue(spinner);
+  spinner.succeed.mockReturnValue(spinner);
+  spinner.fail.mockReturnValue(spinner);
+  spinner.info.mockReturnValue(spinner);
+  spinner.warn.mockReturnValue(spinner);
+  spinner.stop.mockReturnValue(spinner);
+  
+  return spinner;
 };
 
-export const createMockOra = () => jest.fn(() => mockSpinner);
+export const mockSpinner = createMockSpinner();
+
+export const createMockOra = () => jest.fn(() => createMockSpinner());
 
 // Mock readline
 export const mockReadline = {
@@ -123,12 +137,25 @@ export const resetAllMocks = () => {
 // Test utilities
 export const captureOutput = () => {
   const output = [];
+  
+  // Capture process.stdout.write
   mockProcess.stdout.write.mockImplementation((text) => {
     output.push(text);
   });
+  
+  // Also capture console.log
+  const originalConsoleLog = console.log;
+  console.log = jest.fn((...args) => {
+    const text = args.map(arg => typeof arg === 'string' ? arg : String(arg)).join(' ');
+    output.push(text + '\n');
+  });
+  
   return {
     getOutput: () => output.join(''),
-    getLines: () => output.join('').split('\n').filter(Boolean)
+    getLines: () => output.join('').split('\n').filter(Boolean),
+    restore: () => {
+      console.log = originalConsoleLog;
+    }
   };
 };
 
