@@ -1,0 +1,31 @@
+# Development files
+test/
+.eslintrc.json
+.prettierrc
+jsconfig.json
+nodemon.json
+.gitignore
+
+# Source control
+.git/
+.github/
+
+# Documentation
+*.md
+!README.md
+
+# IDE files
+.vscode/
+.idea/
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Environment files
+.env
+.env.*
+
+# Build artifacts
+*.log
+.DS_Store

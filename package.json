@@ -1,0 +1,57 @@
+{
+  "name": "nspecify",
+  "version": "0.1.0",
+  "description": "npx-compatible CLI for Spec-Driven Development with Claude Code",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "nspecify": "./bin/nspecify.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node bin/nspecify.js",
+    "dev": "nodemon bin/nspecify.js",
+    "test": "jest",
+    "lint": "eslint src/",
+    "format": "prettier --write .",
+    "build": "node scripts/build-release.js",
+    "build:patch": "node scripts/build-release.js patch",
+    "build:minor": "node scripts/build-release.js minor",
+    "build:major": "node scripts/build-release.js major",
+    "build:dry": "node scripts/build-release.js patch --no-bump",
+    "validate": "node scripts/build-release.js --validate-only"
+  },
+  "keywords": [
+    "cli",
+    "spec-driven",
+    "claude",
+    "development",
+    "npx"
+  ],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.15.1",
+  "dependencies": {
+    "adm-zip": "0.5.16",
+    "ansi-escapes": "7.0.0",
+    "archiver": "7.0.1",
+    "axios": "1.7.7",
+    "chalk": "5.3.0",
+    "cli-cursor": "5.0.0",
+    "commander": "14.0.1",
+    "ora": "8.2.0",
+    "simple-git": "3.25.0",
+    "strip-ansi": "7.1.0",
+    "which": "4.0.0",
+    "yaml": "2.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.5.5",
+    "eslint": "9.10.0",
+    "jest": "29.7.0",
+    "nodemon": "3.1.4",
+    "prettier": "3.3.3"
+  }
+}
